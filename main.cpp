@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 	if (fs_calib.isOpened())	
 	{
 		fs_calib["camera_matrix"] >> camera_matrix;                        //输出相机内参（包括焦距、畸变、光心等）到camera_matrix
-		fs_calib["distortion_coefficients"] >> distortion_coefficients;                       //输入变形参数 到distortion_coefficients中
+		fs_calib["distortion_coefficients"] >> distortion_coefficients;    //输入变形参数 到distortion_coefficients中
 		distortion_coefficients.convertTo( distortion_coefficients, CV_64F);
 		camera_matrix.convertTo(camera_matrix, CV_64F);
 		cout << "camera _matrix: \n" << camera_matrix<< endl;
@@ -58,9 +58,9 @@ int main(int argc, char **argv)
 		if (src.empty())	 return -1;                                 
 		//imshow("原始图像",src);    
 		
-        //1. 提取黄色的图像，并二值化处理
-		cvtColor(src, hsvimg, CV_BGR2HSV);                  //2.把读取的src图像转为HSV图
-		vector<Mat> channels;                                              //分成三个频道
+                //提取黄色的图像，并二值化处理
+		cvtColor(src, hsvimg, CV_BGR2HSV);                 
+		vector<Mat> channels;                                           
 		split(src,channels);
 		Mat hue = channels.at(0);
 		Mat saturate = channels.at(1);
@@ -78,21 +78,22 @@ int main(int argc, char **argv)
 					mask.at<uchar>(i, j) = 255;
 			}
 		}
-	    Mat kernel1 = getStructuringElement(MORPH_RECT, Size(10, 10));//设置内核1
-		Mat kernel2 = getStructuringElement(MORPH_RECT, Size(8, 8));//设置内核2
-		Mat kernel3 = getStructuringElement(MORPH_RECT, Size(15, 15));//设置内核3
+	        Mat kernel1 = getStructuringElement(MORPH_RECT, Size(10, 10));  //设置内核1
+		Mat kernel2 = getStructuringElement(MORPH_RECT, Size(8, 8));    //设置内核2
+		Mat kernel3 = getStructuringElement(MORPH_RECT, Size(15, 15));  //设置内核3
 		dilate(mask, mask, kernel1); 
-		morphologyEx(mask,mask,MORPH_OPEN,kernel2);  //进行开运算(去除小的噪点)
-		floodFill(mask, Point(0, 0), Scalar(0));//漫水法
-		morphologyEx(mask, mask, MORPH_CLOSE, kernel3);//闭运算(连接白色区域，减少图形数量)
+		morphologyEx(mask,mask,MORPH_OPEN,kernel2);                     //进行开运算(去除小的噪点)
+		floodFill(mask, Point(0, 0), Scalar(0));                        //漫水法
+		morphologyEx(mask, mask, MORPH_CLOSE, kernel3);                 //闭运算(连接白色区域，减少图形数量)
 		//imshow("黑白图像", mask);
 
-		//2.提取轮廓，找到外接矩形
+		//提取轮廓，找到外接矩形
 		Mat frame =src.clone();
-	    vector<vector<Point>> contours;
-	    vector<Vec4i> hireachy;
+	        vector<vector<Point>> contours;
+	        vector<Vec4i> hireachy;
 		vector<RotatedRect> minRects;
-		Point2f vertex[4];                                         //外接矩形的四个顶点
+		//外接矩形的四个顶点
+		Point2f vertex[4];   
 		findContours(mask, contours, hireachy, CV_RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
 		
 		float getArea;
@@ -101,7 +102,7 @@ int main(int argc, char **argv)
 		{
 
 			RotatedRect minRect = minAreaRect(Mat(contours[i]));  //最小外接矩形
-			minRect.points(vertex);                               //外接矩形的四个顶点
+			minRect.points(vertex);            
 			getArea = minRect.size.width * minRect.size.height;
 			if (getArea > 1000)
 			{
@@ -116,7 +117,7 @@ int main(int argc, char **argv)
 		}
 		imshow("框出区域", frame);
 
-		//3.画出两矩形的边点和中心点
+		//画出两矩形的边点和中心点
 		float distance;
 		float height;
 		RotatedRect leftRect, rightRect;  //左右两个矩形
@@ -178,10 +179,10 @@ int main(int argc, char **argv)
 		//清除储存的数据!!!!
 		minRects.clear();                       
 
-		//4.将控制点在相机坐标系的坐标压入容器points
-		vector<Point3d> objP;           //自己定义世界坐标系三维坐标
+		//将控制点在相机坐标系的坐标压入容器points
+		vector<Point3d> objP;         //自己定义世界坐标系三维坐标
 		vector<Point2d> points;       //相机坐标系的二维坐标
-		//Mat objM;                                   //自己定义世界坐标系矩阵，包括四个点
+		//Mat objM;                   /自己定义世界坐标系矩阵，包括四个点
 		double q[4];
 		Mat rotM, rotT,rvec,tvec;
 
@@ -208,16 +209,9 @@ int main(int argc, char **argv)
 		cout<<"2 translation vector: "<<endl<<tvec<<endl;  
 		cout<<"3 rotation matrix: "<<endl<<rotM<<endl;  
 		//cout<<"4 translation matrix: "<<endl<<rotT<<endl;  
-
-        //**********************是否只需要循环一次得到相关矩阵？？？？ 如何把2D转成3D????
 		getQuaternion(rotM, q);
-		//Mat objT = Mat(objP[1]);
-		//Mat(objT).convertTo(objT, CV_32F);
-		//cout<<objT+ tvec<<endl;
-
-		//objT = rotM*(objT + tvec);
-
-		//5.创建Marker类
+		
+		//创建Marker类
 		visualization_msgs::Marker marker;
 		//设置frame_id
 		marker.header.frame_id = "/map";
@@ -249,9 +243,7 @@ int main(int argc, char **argv)
 		
 		//Marker被自动销毁之前的存活时间，rospy.Duration()意味着在程序结束之前一直存在
 		marker.lifetime = ros::Duration();
-		
-		// sensor_msgs::ImagePtr msg;
-		// msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", frame).toImageMsg();
+
 		while (marker_pub.getNumSubscribers() < 1)
 		{
 			if (!ros::ok())
@@ -262,12 +254,6 @@ int main(int argc, char **argv)
 			sleep(1);
 		}
 		marker_pub.publish(marker);
-
-
-
-
-
-
 
 
 		if(waitKey(50) == 27)                                       //esc退出
